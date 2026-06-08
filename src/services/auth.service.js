@@ -1,4 +1,3 @@
-const bcrypt = require('bcryptjs');
 const Account = require('../models/Account');
 const generateToken = require('../utils/generateToken');
 
@@ -13,9 +12,9 @@ const loginCustomer = async ({ identifier, password }) => {
             { phone: identifier }
         ],
         role: 'CUSTOMER'
-    }).select('+passwordHash');
+    }).select('+password');
 
-    if (!account) {
+    if (!account || !account.password || !(await account.comparePassword(password))) {
         throw new Error('Incorrect account or password');
     }
 
@@ -23,7 +22,7 @@ const loginCustomer = async ({ identifier, password }) => {
         throw new Error('This account has been deleted');
     }
 
-    if (account.status === 'BANNED') {
+    if (account.status === 'BAN') {
         throw new Error('This account has been banned');
     }
 
@@ -31,16 +30,7 @@ const loginCustomer = async ({ identifier, password }) => {
         throw new Error('This account has not been activated');
     }
 
-    const isMatch = await bcrypt.compare(password, account.passwordHash);
-
-    if (!isMatch) {
-        throw new Error('Incorrect account or password');
-    }
-
-    const token = generateToken({
-        accountId: account._id,
-        role: account.role
-    });
+    const token = generateToken(account._id, account.role);
 
     return {
         token,
