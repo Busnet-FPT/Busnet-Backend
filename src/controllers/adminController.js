@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 const Account = require("../models/Account");
 const PartnerInformation = require("../models/PartnerInformation");
 const CodeVerification = require("../models/CodeVerification");
@@ -388,4 +389,54 @@ const getPartnerList = async (req, res, next) => {
   }
 };
 
-module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, getProfile, updateProfile, changePassword, getPartnerList };
+// GET /api/admin/partners/:id
+const getPartnerDetail = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400);
+      throw new Error("ID đối tác không hợp lệ");
+    }
+
+    const account = await Account.findOne({ _id: id, role: "PARTNER" });
+    if (!account) {
+      res.status(404);
+      throw new Error("Không tìm thấy đối tác");
+    }
+
+    const info = await PartnerInformation.findOne({ accountId: account._id });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        _id: account._id,
+        fullName: account.fullName,
+        email: account.email,
+        phone: account.phone,
+        status: account.status,
+        isEmailVerified: account.isEmailVerified,
+        profilePicture: account.profilePicture,
+        createdAt: account.createdAt,
+        partnerInformation: info && {
+          operatorName: info.operatorName,
+          operatorPhone: info.operatorPhone,
+          description: info.description,
+          amenities: info.amenities,
+          policies: info.policies,
+          profilePicture: info.profilePicture,
+          coverImage: info.coverImage,
+          bankName: info.bankName,
+          bankNumber: info.bankNumber,
+          bankBranch: info.bankBranch,
+          isVerify: info.isVerify,
+          ratingAvg: info.ratingAvg,
+          totalReviews: info.totalReviews,
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, getProfile, updateProfile, changePassword, getPartnerList, getPartnerDetail };
