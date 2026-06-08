@@ -3,6 +3,8 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
 const connectDB = require("./config/db");
+const routes = require("./routes");
+const { notFound, errorHandler } = require("./middlewares/errorMiddleware");
 
 dotenv.config();
 
@@ -53,7 +55,7 @@ app.get("/health", (req, res) => {
     success: true,
     status: "healthy",
     uptime: `${Math.floor(process.uptime())} seconds`,
-    database: "connected",
+    environment: process.env.NODE_ENV || "development",
     timestamp: new Date().toISOString(),
   });
 });
