@@ -18,9 +18,14 @@ const sanitizeAdmin = (account) => ({
   _id: account._id,
   fullName: account.fullName,
   email: account.email,
+  phone: account.phone,
   role: account.role,
   status: account.status,
+  gender: account.gender,
+  dob: account.dob,
+  profilePicture: account.profilePicture,
   isEmailVerified: account.isEmailVerified,
+  createdAt: account.createdAt,
 });
 
 const verifyEmailTemplate = (fullName, otp) => `
@@ -254,4 +259,9 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
-module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword };
+// GET /api/admin/me
+const getProfile = (req, res) => {
+  res.status(200).json({ success: true, user: sanitizeAdmin(req.user) });
+};
+
+module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, getProfile };
