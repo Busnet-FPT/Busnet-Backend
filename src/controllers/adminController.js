@@ -254,4 +254,10 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
-module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword };
+// POST /api/admin/logout
+const logout = (req, res) => {
+  res.clearCookie("token");
+  res.status(200).json({ success: true, message: "Đăng xuất thành công" });
+};
+
+module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, logout };
