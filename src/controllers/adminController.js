@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const Account = require("../models/Account");
+const PartnerInformation = require("../models/PartnerInformation");
 const CodeVerification = require("../models/CodeVerification");
 const generateToken = require("../utils/generateToken");
 const generateOTP = require("../utils/generateOTP");
@@ -326,4 +327,65 @@ const changePassword = async (req, res, next) => {
   }
 };
 
-module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, getProfile, updateProfile, changePassword };
+const PARTNER_STATUSES = ["UNVERIFIED", "ACTIVE", "DELETED", "BAN", "PENDING_APPROVAL"];
+
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// GET /api/admin/partners
+const getPartnerList = async (req, res, next) => {
+  try {
+    const { search, status } = req.query;
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 100);
+
+    if (status && !PARTNER_STATUSES.includes(status)) {
+      res.status(400);
+      throw new Error("Trạng thái không hợp lệ");
+    }
+
+    const filter = { role: "PARTNER" };
+    if (status) filter.status = status;
+    if (search) {
+      const regex = new RegExp(escapeRegex(search), "i");
+      filter.$or = [{ fullName: regex }, { email: regex }, { phone: regex }];
+    }
+
+    const [accounts, total] = await Promise.all([
+      Account.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      Account.countDocuments(filter),
+    ]);
+
+    const infos = await PartnerInformation.find({ accountId: { $in: accounts.map((a) => a._id) } });
+    const infoByAccountId = new Map(infos.map((info) => [info.accountId.toString(), info]));
+
+    const partners = accounts.map((acc) => {
+      const info = infoByAccountId.get(acc._id.toString());
+      return {
+        _id: acc._id,
+        fullName: acc.fullName,
+        email: acc.email,
+        phone: acc.phone,
+        status: acc.status,
+        isEmailVerified: acc.isEmailVerified,
+        operatorName: info?.operatorName,
+        operatorPhone: info?.operatorPhone,
+        isVerify: info?.isVerify ?? false,
+        ratingAvg: info?.ratingAvg ?? 0,
+        createdAt: acc.createdAt,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      data: partners,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, getProfile, updateProfile, changePassword, getPartnerList };
