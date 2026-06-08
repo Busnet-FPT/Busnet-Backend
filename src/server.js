@@ -19,6 +19,7 @@ app.use(cookieParser());
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api", routes);
 
 // Thêm routes của từng module tại đây:
 // app.use("/api/accounts",      require("./routes/accountRoutes"));
@@ -60,7 +61,6 @@ app.get("/health", (req, res) => {
   });
 });
 
-const { notFound, errorHandler } = require("./middlewares/errorMiddleware");
 app.use(notFound);
 app.use(errorHandler);
 

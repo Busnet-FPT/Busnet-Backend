@@ -84,9 +84,11 @@ const register = async (req, res, next) => {
     const { otp, hashed, expires } = generateOTP();
     await CodeVerification.create({
       accountId: account._id,
-      code: hashed,
+      target: email,
+      targetType: "EMAIL",
+      codeHash: hashed,
       expiredAt: expires,
-      type: "EMAIL_VERIFY",
+      type: "VERIFY_EMAIL",
     });
 
     await sendEmail({
@@ -117,9 +119,9 @@ const verifyEmail = async (req, res, next) => {
 
     const codeDoc = await CodeVerification.findOne({
       accountId: account._id,
-      type: "EMAIL_VERIFY",
+      type: "VERIFY_EMAIL",
       used: false,
-    }).select("+code");
+    }).select("+codeHash");
 
     if (!codeDoc) {
       res.status(400);
@@ -129,7 +131,7 @@ const verifyEmail = async (req, res, next) => {
       res.status(400);
       throw new Error("OTP đã hết hạn. Vui lòng yêu cầu gửi lại");
     }
-    if (codeDoc.code !== hashOTP(otp)) {
+    if (codeDoc.codeHash !== hashOTP(otp)) {
       res.status(400);
       throw new Error("OTP không hợp lệ");
     }
@@ -173,10 +175,17 @@ const resendOTP = async (req, res, next) => {
     }
 
     // Invalidate previous OTPs
-    await CodeVerification.updateMany({ accountId: account._id, type: "EMAIL_VERIFY", used: false }, { used: true });
+    await CodeVerification.updateMany({ accountId: account._id, type: "VERIFY_EMAIL", used: false }, { used: true });
 
     const { otp, hashed, expires } = generateOTP();
-    await CodeVerification.create({ accountId: account._id, code: hashed, expiredAt: expires, type: "EMAIL_VERIFY" });
+    await CodeVerification.create({
+      accountId: account._id,
+      target: email,
+      targetType: "EMAIL",
+      codeHash: hashed,
+      expiredAt: expires,
+      type: "VERIFY_EMAIL",
+    });
 
     await sendEmail({ to: email, subject: "BusNest — Mã OTP mới", html: verifyEmailTemplate(account.fullName, otp) });
 
@@ -228,10 +237,17 @@ const forgotPassword = async (req, res, next) => {
       return res.status(200).json({ success: true, message: `Nếu email tồn tại, mã OTP đã gửi đến ${email}` });
     }
 
-    await CodeVerification.updateMany({ accountId: account._id, type: "PASSWORD_RESET", used: false }, { used: true });
+    await CodeVerification.updateMany({ accountId: account._id, type: "RESET_PASSWORD", used: false }, { used: true });
 
     const { otp, hashed, expires } = generateOTP();
-    await CodeVerification.create({ accountId: account._id, code: hashed, expiredAt: expires, type: "PASSWORD_RESET" });
+    await CodeVerification.create({
+      accountId: account._id,
+      target: email,
+      targetType: "EMAIL",
+      codeHash: hashed,
+      expiredAt: expires,
+      type: "RESET_PASSWORD",
+    });
 
     await sendEmail({ to: email, subject: "BusNest — Đặt lại mật khẩu", html: resetPasswordTemplate(account.fullName, otp) });
 
@@ -254,15 +270,15 @@ const resetPassword = async (req, res, next) => {
 
     const codeDoc = await CodeVerification.findOne({
       accountId: account._id,
-      type: "PASSWORD_RESET",
+      type: "RESET_PASSWORD",
       used: false,
-    }).select("+code");
+    }).select("+codeHash");
 
     if (!codeDoc || codeDoc.expiredAt < new Date()) {
       res.status(400);
       throw new Error("OTP không hợp lệ hoặc đã hết hạn");
     }
-    if (codeDoc.code !== hashOTP(otp)) {
+    if (codeDoc.codeHash !== hashOTP(otp)) {
       res.status(400);
       throw new Error("OTP không hợp lệ");
     }
