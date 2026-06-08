@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const Account = require("../models/Account");
 const PartnerInformation = require("../models/PartnerInformation");
 const CodeVerification = require("../models/CodeVerification");
+const BanHistory = require("../models/BanHistory");
 const generateToken = require("../utils/generateToken");
 const generateOTP = require("../utils/generateOTP");
 const sendEmail = require("../utils/sendEmail");
@@ -439,4 +440,79 @@ const getPartnerDetail = async (req, res, next) => {
   }
 };
 
-module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, getProfile, updateProfile, changePassword, getPartnerList, getPartnerDetail };
+const BAN_TYPES = ["TEMPORARY", "PERMANENT"];
+
+// PATCH /api/admin/partners/:id/status
+// Enables (unbans) or disables (bans) a PARTNER account. Disabling logs an
+// entry in BanHistory (type + reason); enabling only restores the status —
+// only ACTIVE/BAN partner accounts can be toggled (not PENDING_APPROVAL,
+// UNVERIFIED or DELETED, which follow their own lifecycle).
+const updatePartnerStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { action, type, reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400);
+      throw new Error("ID đối tác không hợp lệ");
+    }
+    if (!["ENABLE", "DISABLE"].includes(action)) {
+      res.status(400);
+      throw new Error("Hành động không hợp lệ. Chỉ chấp nhận ENABLE hoặc DISABLE");
+    }
+
+    const account = await Account.findOne({ _id: id, role: "PARTNER" });
+    if (!account) {
+      res.status(404);
+      throw new Error("Không tìm thấy đối tác");
+    }
+    if (!["ACTIVE", "BAN"].includes(account.status)) {
+      res.status(400);
+      throw new Error("Không thể thay đổi trạng thái của tài khoản này");
+    }
+
+    if (action === "DISABLE") {
+      if (account.status === "BAN") {
+        return res.status(400).json({ success: false, message: "Tài khoản đối tác đã bị khóa" });
+      }
+      if (type !== undefined && !BAN_TYPES.includes(type)) {
+        res.status(400);
+        throw new Error("Loại khóa tài khoản không hợp lệ");
+      }
+
+      account.status = "BAN";
+      await account.save();
+
+      const banCounts = (await BanHistory.countDocuments({ accountId: account._id })) + 1;
+      await BanHistory.create({
+        accountId: account._id,
+        banCounts,
+        type: type || "TEMPORARY",
+        banDescription: reason,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Đã khóa tài khoản đối tác",
+        data: { _id: account._id, status: account.status },
+      });
+    }
+
+    if (account.status !== "BAN") {
+      return res.status(400).json({ success: false, message: "Tài khoản đối tác đang hoạt động" });
+    }
+
+    account.status = "ACTIVE";
+    await account.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Đã mở khóa tài khoản đối tác",
+      data: { _id: account._id, status: account.status },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, getProfile, updateProfile, changePassword, getPartnerList, getPartnerDetail, updatePartnerStatus };
