@@ -1,65 +1,19 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const addressSchema = new mongoose.Schema(
-    {
-        accountId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Account',
-            required: true,
-            index: true
-        },
-
-        type: {
-            type: String,
-            enum: ['HOME', 'OFFICE', 'BUSINESS', 'OTHER'],
-            default: 'OTHER'
-        },
-
-        address: {
-            type: String,
-            required: true,
-            trim: true
-        },
-
-        ward: {
-            type: String,
-            trim: true
-        },
-
-        wardName: {
-            type: String,
-            trim: true
-        },
-
-        district: {
-            type: String,
-            trim: true
-        },
-
-        districtName: {
-            type: String,
-            trim: true
-        },
-
-        province: {
-            type: String,
-            trim: true
-        },
-
-        provinceName: {
-            type: String,
-            trim: true
-        },
-
-        isDefault: {
-            type: Boolean,
-            default: false
-        }
-    },
-    {
-        timestamps: true,
-        collection: 'addresses'
-    }
+  {
+    accountId: { type: mongoose.Schema.Types.ObjectId, ref: "Account", required: true },
+    address: { type: String, trim: true },
+    ward: { type: String },
+    wardName: { type: String },
+    district: { type: String },
+    districtName: { type: String },
+    province: { type: String },
+    provinceName: { type: String },
+  },
+  { collection: "addresses" }
 );
 
-module.exports = mongoose.model('Address', addressSchema);
+addressSchema.index({ accountId: 1 });
+
+module.exports = mongoose.model("Address", addressSchema);

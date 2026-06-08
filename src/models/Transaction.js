@@ -1,135 +1,35 @@
-
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const transactionSchema = new mongoose.Schema(
-    {
-        partnerId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Account',
-            default: null,
-            index: true
-        },
-
-        senderAccountId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Account',
-            default: null,
-            index: true
-        },
-
-        bookingId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Booking',
-            default: null,
-            index: true
-        },
-
-        subscriptionId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'PartnerSubscription',
-            default: null,
-            index: true
-        },
-
-        transactionType: {
-            type: String,
-            enum: ['BOOKING_PAYMENT', 'SUBSCRIPTION_PAYMENT', 'REFUND', 'OTHER'],
-            required: true
-        },
-
-        amount: {
-            type: Number,
-            required: true,
-            min: 0
-        },
-
-        currency: {
-            type: String,
-            default: 'VND'
-        },
-
-        status: {
-            type: String,
-            enum: ['PENDING', 'SUCCESS', 'FAILED', 'EXPIRED', 'REFUNDED', 'CANCELLED'],
-            default: 'PENDING',
-            index: true
-        },
-
-        expiresAt: {
-            type: Date,
-            default: null
-        },
-
-        sepayTransactionId: {
-            type: String,
-            trim: true,
-            default: null
-        },
-
-        gateway: {
-            type: String,
-            default: null
-        },
-
-        transactionDate: {
-            type: Date,
-            default: Date.now
-        },
-
-        accountNumber: {
-            type: String,
-            default: null
-        },
-
-        code: {
-            type: String,
-            default: null
-        },
-
-        content: {
-            type: String,
-            default: null
-        },
-
-        transferAmount: {
-            type: Number,
-            default: 0
-        },
-
-        transferType: {
-            type: String,
-            default: null
-        },
-
-        accumulated: {
-            type: Number,
-            default: 0
-        },
-
-        subAccount: {
-            type: String,
-            default: null
-        },
-
-        referenceCode: {
-            type: String,
-            default: null
-        },
-
-        description: {
-            type: String,
-            default: ''
-        },
-
-        metadata: {
-            type: mongoose.Schema.Types.Mixed,
-            default: {}
-        }
-    },
-    {
-        timestamps: true,
-        collection: 'transactions'
-    }
+  {
+    partnerId: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
+    senderAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "Account" },
+    bookingId: { type: mongoose.Schema.Types.ObjectId, ref: "Booking" },
+    subscriptionId: { type: mongoose.Schema.Types.ObjectId, ref: "PartnerSubscription" },
+    transactionType: { type: String, enum: ["BOOKING_PAYMENT", "SUBSCRIPTION_PAYMENT", "REFUND"] },
+    amount: { type: Number, required: true },
+    currency: { type: String, default: "VND" },
+    status: { type: String, enum: ["PENDING", "COMPLETED", "FAILED", "EXPIRED"], default: "PENDING" },
+    expiresAt: { type: Date },
+    // SePay webhook fields
+    sepayTransactionId: { type: String },
+    gateway: { type: String }, // SEPAY, CASH, BANK_TRANSFER
+    transactionDate: { type: Date },
+    accountNumber: { type: String },
+    code: { type: String },
+    content: { type: String },
+    transferAmount: { type: Number },
+    transferType: { type: String },
+    accumulated: { type: Number },
+    subAccount: { type: String },
+    referenceCode: { type: String },
+    description: { type: String },
+  },
+  { timestamps: true, collection: "transactions" }
 );
 
-module.exports = mongoose.model('Transaction', transactionSchema);
+transactionSchema.index({ bookingId: 1 });
+transactionSchema.index({ partnerId: 1, createdAt: -1 });
+transactionSchema.index({ status: 1, expiresAt: 1 });
+
+module.exports = mongoose.model("Transaction", transactionSchema);
