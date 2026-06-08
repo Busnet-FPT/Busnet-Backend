@@ -35,6 +35,18 @@ const verifyEmailTemplate = (fullName, otp) => `
   </div>
 `;
 
+const resetPasswordTemplate = (fullName, otp) => `
+  <div style="font-family:sans-serif;max-width:480px;margin:auto">
+    <h2 style="color:#e8321a">Đặt lại mật khẩu quản trị viên BusNest</h2>
+    <p>Xin chào <strong>${fullName}</strong>,</p>
+    <p>Mã OTP đặt lại mật khẩu tài khoản Admin của bạn là:</p>
+    <div style="font-size:32px;font-weight:bold;letter-spacing:8px;
+                text-align:center;padding:16px;background:#f1f3f4;
+                border-radius:8px;margin:16px 0">${otp}</div>
+    <p style="color:#666">Mã có hiệu lực trong <strong>10 phút</strong>. Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>
+  </div>
+`;
+
 // POST /api/admin/login
 // Dedicated entry point for ADMIN accounts — kept separate from the
 // CUSTOMER/PARTNER login because admin accounts can't self-register
@@ -170,4 +182,76 @@ const resendOTP = async (req, res, next) => {
   }
 };
 
-module.exports = { adminLogin, verifyEmail, resendOTP };
+// POST /api/admin/forgot-password
+// Sends a password-reset OTP to an ADMIN account's email. Always responds
+// with a generic success message (even if the account doesn't exist or its
+// email isn't verified) to prevent email enumeration.
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const account = await Account.findOne({ email, role: "ADMIN" });
+
+    if (!account || !account.isEmailVerified) {
+      return res.status(200).json({ success: true, message: `Nếu email tồn tại, mã OTP đã gửi đến ${email}` });
+    }
+
+    await CodeVerification.updateMany({ accountId: account._id, type: "RESET_PASSWORD", used: false }, { used: true });
+
+    const { otp, hashed, expires } = generateOTP();
+    await CodeVerification.create({
+      accountId: account._id,
+      target: email,
+      targetType: "EMAIL",
+      codeHash: hashed,
+      expiredAt: expires,
+      type: "RESET_PASSWORD",
+    });
+
+    await sendEmail({ to: email, subject: "BusNest — Đặt lại mật khẩu Admin", html: resetPasswordTemplate(account.fullName, otp) });
+
+    res.status(200).json({ success: true, message: `Nếu email tồn tại, mã OTP đã gửi đến ${email}` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/admin/reset-password
+// Verifies the OTP and sets a new password for an ADMIN account.
+const resetPassword = async (req, res, next) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    const account = await Account.findOne({ email, role: "ADMIN" });
+    if (!account) {
+      res.status(400);
+      throw new Error("Yêu cầu không hợp lệ");
+    }
+
+    const codeDoc = await CodeVerification.findOne({
+      accountId: account._id,
+      type: "RESET_PASSWORD",
+      used: false,
+    }).select("+codeHash");
+
+    if (!codeDoc || codeDoc.expiredAt < new Date()) {
+      res.status(400);
+      throw new Error("OTP không hợp lệ hoặc đã hết hạn");
+    }
+    if (codeDoc.codeHash !== hashOTP(otp)) {
+      res.status(400);
+      throw new Error("OTP không hợp lệ");
+    }
+
+    codeDoc.used = true;
+    await codeDoc.save();
+
+    account.password = newPassword;
+    await account.save();
+
+    res.status(200).json({ success: true, message: "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword };
