@@ -4,6 +4,9 @@ const CodeVerification = require("../models/CodeVerification");
 const generateToken = require("../utils/generateToken");
 const generateOTP = require("../utils/generateOTP");
 const sendEmail = require("../utils/sendEmail");
+const uploadToCloudinary = require("../utils/uploadToCloudinary");
+
+const ALLOWED_GENDERS = ["MALE", "FEMALE", "OTHER"];
 
 const cookieOptions = {
   httpOnly: true,
@@ -264,4 +267,38 @@ const getProfile = (req, res) => {
   res.status(200).json({ success: true, user: sanitizeAdmin(req.user) });
 };
 
-module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, getProfile };
+// PUT /api/admin/me
+const updateProfile = async (req, res, next) => {
+  try {
+    const { fullName, phone, gender, dob } = req.body;
+
+    if (gender !== undefined && gender !== "" && !ALLOWED_GENDERS.includes(gender)) {
+      res.status(400);
+      throw new Error("Giới tính không hợp lệ");
+    }
+    if (dob !== undefined && dob !== "" && isNaN(new Date(dob).getTime())) {
+      res.status(400);
+      throw new Error("Ngày sinh không hợp lệ");
+    }
+
+    const account = await Account.findById(req.user._id);
+
+    if (fullName !== undefined) account.fullName = fullName;
+    if (phone !== undefined) account.phone = phone;
+    if (gender !== undefined) account.gender = gender || undefined;
+    if (dob !== undefined) account.dob = dob ? new Date(dob) : undefined;
+
+    if (req.file) {
+      const { url } = await uploadToCloudinary(req.file.buffer);
+      account.profilePicture = url;
+    }
+
+    await account.save();
+
+    res.status(200).json({ success: true, message: "Cập nhật hồ sơ thành công", user: sanitizeAdmin(account) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, getProfile, updateProfile };
