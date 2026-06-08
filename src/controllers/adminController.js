@@ -301,4 +301,29 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
-module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, getProfile, updateProfile };
+// POST /api/admin/change-password
+const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      res.status(400);
+      throw new Error("Vui lòng nhập mật khẩu hiện tại và mật khẩu mới");
+    }
+
+    const account = await Account.findById(req.user._id).select("+password");
+    if (!(await account.comparePassword(currentPassword))) {
+      res.status(401);
+      throw new Error("Mật khẩu hiện tại không đúng");
+    }
+
+    account.password = newPassword;
+    await account.save();
+
+    res.clearCookie("token");
+    res.status(200).json({ success: true, message: "Đổi mật khẩu thành công. Vui lòng đăng nhập lại" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { adminLogin, verifyEmail, resendOTP, forgotPassword, resetPassword, getProfile, updateProfile, changePassword };
