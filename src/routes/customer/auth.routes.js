@@ -5,7 +5,8 @@ const {
     validateVerifyEmail, 
     validateForgotPassword, 
     validateVerifyResetCode, 
-    validateResetPassword 
+    validateResetPassword,
+    validateLogin
 } = require('../../validations/auth.validation');
 
 const router = express.Router();
@@ -14,7 +15,7 @@ const router = express.Router();
 router.post('/register', validateRegister, customerAuthController.register);
 
 // POST /api/customer/auth/login
-router.post('/login', customerAuthController.login);
+router.post('/login', validateLogin, customerAuthController.login);
 
 // POST /api/customer/auth/google
 router.post('/google', customerAuthController.loginWithGoogle);
