@@ -69,6 +69,102 @@ const validateRegister = async (req, res, next) => {
     next();
 };
 
-module.exports = {
-    validateRegister
+
+/**
+ * Validation rules for email verification
+ */
+const verifyEmailRules = [
+    body('email')
+        .trim()
+        .notEmpty().withMessage('Email is required')
+        .isEmail().withMessage('Invalid email format')
+        .normalizeEmail(),
+    body('code')
+        .trim()
+        .notEmpty().withMessage('Verification code is required')
+        .isLength({ min: 6, max: 6 }).withMessage('Code must be exactly 6 characters')
+        .matches(/^\d{6}$/).withMessage('Code must contain only digits')
+];
+
+/**
+ * Validation rules for forgot password
+ */
+const forgotPasswordRules = [
+    body('email')
+        .trim()
+        .notEmpty().withMessage('Email is required')
+        .isEmail().withMessage('Invalid email format')
+        .normalizeEmail()
+];
+
+/**
+ * Validation rules for checking reset code
+ */
+const verifyResetCodeRules = [
+    body('email')
+        .trim()
+        .notEmpty().withMessage('Email is required')
+        .isEmail().withMessage('Invalid email format')
+        .normalizeEmail(),
+    body('code')
+        .trim()
+        .notEmpty().withMessage('Verification code is required')
+        .isLength({ min: 6, max: 6 }).withMessage('Code must be exactly 6 characters')
+        .matches(/^\d{6}$/).withMessage('Code must contain only digits')
+];
+
+/**
+ * Validation rules for resetting password
+ */
+const resetPasswordRules = [
+    body('email')
+        .trim()
+        .notEmpty().withMessage('Email is required')
+        .isEmail().withMessage('Invalid email format')
+        .normalizeEmail(),
+    body('code')
+        .trim()
+        .notEmpty().withMessage('Verification code is required')
+        .isLength({ min: 6, max: 6 }).withMessage('Code must be exactly 6 characters')
+        .matches(/^\d{6}$/).withMessage('Code must contain only digits'),
+    body('newPassword')
+        .notEmpty().withMessage('New password is required')
+        .isLength({ min: 7, max: 50 }).withMessage('New password must be over 6 characters')
+        .matches(/^[A-Z]/).withMessage('First letter of new password must be capitalized')
+        .matches(/\d/).withMessage('New password must contain at least one number')
+        .matches(/[!@#$%^&*(),.?":{}|<>_+\-=\[\]\\';]/).withMessage('New password must contain at least one special character')
+];
+
+// Helper to run validations and return response
+const runValidation = async (req, res, next, rules) => {
+    for (const rule of rules) {
+        await rule.run(req);
+    }
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        const formattedErrors = errors.array().map(err => ({
+            field: err.path,
+            message: err.msg
+        }));
+        return res.status(400).json({
+            success: false,
+            message: 'Validation failed',
+            errors: formattedErrors
+        });
+    }
+    next();
 };
+
+const validateVerifyEmail = (req, res, next) => runValidation(req, res, next, verifyEmailRules);
+const validateForgotPassword = (req, res, next) => runValidation(req, res, next, forgotPasswordRules);
+const validateVerifyResetCode = (req, res, next) => runValidation(req, res, next, verifyResetCodeRules);
+const validateResetPassword = (req, res, next) => runValidation(req, res, next, resetPasswordRules);
+
+module.exports = {
+    validateRegister,
+    validateVerifyEmail,
+    validateForgotPassword,
+    validateVerifyResetCode,
+    validateResetPassword
+};
+

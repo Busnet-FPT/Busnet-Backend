@@ -5,6 +5,7 @@ const generateToken = require('../utils/generateToken');
 const generateVerificationCode = require('../utils/generateCode');
 const AppError = require('../utils/AppError');
 const { verifyGoogleToken } = require('./googleAuth.service');
+const emailService = require('./email.service');
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -93,9 +94,10 @@ const registerCustomer = async (data) => {
         expiredAt
     });
 
-    // Step 8: Return data
-    // Phase 1: Include OTP in response for testing
-    // Phase 2: Send OTP via email instead
+    // Step 8: Send OTP via email and return data
+    emailService.sendVerificationEmail(email.toLowerCase(), verificationCode)
+        .catch(err => console.error('Failed to send verification email:', err));
+
     return {
         account: {
             _id: account._id,
@@ -110,7 +112,7 @@ const registerCustomer = async (data) => {
             profilePicture: account.profilePicture,
             createdAt: account.createdAt
         },
-        verificationCode // Phase 1: return OTP for Postman testing
+        ...(process.env.NODE_ENV === 'development' ? { verificationCode } : {})
     };
 };
 
@@ -293,8 +295,234 @@ const loginGoogleCustomer = async (idToken) => {
     };
 };
 
+// ============================
+// VERIFY EMAIL
+// ============================
+
+/**
+ * Verify a customer's email address using OTP
+ * @param {string} email
+ * @param {string} code
+ * @returns {Promise<object>} updated account
+ */
+const verifyEmail = async (email, code) => {
+    if (!email || !code) {
+        throw new AppError('Email and verification code are required', 400);
+    }
+
+    // Find the latest active verification code of type 'REGISTER' for this email
+    const verification = await CodeVerification.findOne({
+        target: email.toLowerCase(),
+        targetType: 'EMAIL',
+        type: 'REGISTER',
+        used: false,
+        expiredAt: { $gt: new Date() }
+    }).select('+codeHash');
+
+    if (!verification) {
+        throw new AppError('Invalid or expired verification code', 400);
+    }
+
+    // Check attempt limit
+    if (verification.attemptCount >= verification.maxAttempts) {
+        throw new AppError('Too many failed attempts. Please register again or request a new code.', 400);
+    }
+
+    // Verify code
+    const isMatch = await bcrypt.compare(code, verification.codeHash);
+    if (!isMatch) {
+        verification.attemptCount += 1;
+        await verification.save();
+        throw new AppError('Incorrect verification code', 400);
+    }
+
+    // Code is valid! Mark as used
+    verification.used = true;
+    verification.usedAt = new Date();
+    await verification.save();
+
+    // Activate user account
+    const account = await Account.findOneAndUpdate(
+        { email: email.toLowerCase(), deletedAt: null },
+        { 
+            status: 'ACTIVE', 
+            isEmailVerified: true 
+        },
+        { returnDocument: 'after' }
+    );
+
+    if (!account) {
+        throw new AppError('Account not found', 404);
+    }
+
+    return account;
+};
+
+// ============================
+// FORGOT PASSWORD
+// ============================
+
+/**
+ * Forgot password - generates OTP and emails it to the user
+ * @param {string} email
+ */
+const forgotPassword = async (email) => {
+    if (!email) {
+        throw new AppError('Email is required', 400);
+    }
+
+    // Find the customer account
+    const account = await Account.findOne({
+        email: email.toLowerCase(),
+        role: 'CUSTOMER',
+        deletedAt: null
+    });
+
+    if (!account) {
+        throw new AppError('Account with this email does not exist', 404);
+    }
+
+    if (account.status === 'BANNED' || account.status === 'DELETED') {
+        throw new AppError('This account is suspended or deleted', 403);
+    }
+
+    // Generate 6-digit OTP code
+    const verificationCode = generateVerificationCode();
+    const codeHash = await bcrypt.hash(verificationCode, BCRYPT_SALT_ROUNDS);
+    const expiredAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store in CodeVerification
+    // If the account is UNVERIFIED, we generate a REGISTER code so they can verify and activate
+    const codeType = account.status === 'UNVERIFIED' ? 'REGISTER' : 'RESET_PASSWORD';
+    await CodeVerification.create({
+        accountId: account._id,
+        target: email.toLowerCase(),
+        targetType: 'EMAIL',
+        type: codeType,
+        codeHash,
+        expiredAt
+    });
+
+    // Send email based on account status
+    if (account.status === 'UNVERIFIED') {
+        emailService.sendVerificationEmail(email.toLowerCase(), verificationCode)
+            .catch(err => console.error('Failed to send verification email:', err));
+    } else {
+        emailService.sendPasswordResetEmail(email.toLowerCase(), verificationCode)
+            .catch(err => console.error('Failed to send password reset email:', err));
+    }
+
+    return { message: account.status === 'UNVERIFIED' ? 'Verification code has been resent to your email.' : 'Password reset code has been sent to your email.' };
+};
+
+// ============================
+// VERIFY RESET CODE
+// ============================
+
+/**
+ * Verify if reset code is valid (frontend can check this before showing form)
+ * @param {string} email
+ * @param {string} code
+ * @returns {Promise<boolean>}
+ */
+const verifyResetCode = async (email, code) => {
+    if (!email || !code) {
+        throw new AppError('Email and code are required', 400);
+    }
+
+    const verification = await CodeVerification.findOne({
+        target: email.toLowerCase(),
+        targetType: 'EMAIL',
+        type: 'RESET_PASSWORD',
+        used: false,
+        expiredAt: { $gt: new Date() }
+    }).select('+codeHash');
+
+    if (!verification) {
+        throw new AppError('Invalid or expired verification code', 400);
+    }
+
+    if (verification.attemptCount >= verification.maxAttempts) {
+        throw new AppError('Too many failed attempts.', 400);
+    }
+
+    const isMatch = await bcrypt.compare(code, verification.codeHash);
+    if (!isMatch) {
+        verification.attemptCount += 1;
+        await verification.save();
+        throw new AppError('Incorrect verification code', 400);
+    }
+
+    return true;
+};
+
+// ============================
+// RESET PASSWORD
+// ============================
+
+/**
+ * Reset password using the verification OTP code
+ * @param {string} email
+ * @param {string} code
+ * @param {string} newPassword
+ */
+const resetPassword = async (email, code, newPassword) => {
+    if (!email || !code || !newPassword) {
+        throw new AppError('Email, code, and new password are required', 400);
+    }
+
+    // 1. Verify code
+    const verification = await CodeVerification.findOne({
+        target: email.toLowerCase(),
+        targetType: 'EMAIL',
+        type: 'RESET_PASSWORD',
+        used: false,
+        expiredAt: { $gt: new Date() }
+    }).select('+codeHash');
+
+    if (!verification) {
+        throw new AppError('Invalid or expired verification code', 400);
+    }
+
+    if (verification.attemptCount >= verification.maxAttempts) {
+        throw new AppError('Too many failed attempts.', 400);
+    }
+
+    const isMatch = await bcrypt.compare(code, verification.codeHash);
+    if (!isMatch) {
+        verification.attemptCount += 1;
+        await verification.save();
+        throw new AppError('Incorrect verification code', 400);
+    }
+
+    // 2. Code is valid! Hash the new password
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
+
+    // 3. Update the account password
+    const account = await Account.findOneAndUpdate(
+        { email: email.toLowerCase(), deletedAt: null },
+        { passwordHash },
+        { returnDocument: 'after' }
+    );
+
+    if (!account) {
+        throw new AppError('Account not found', 404);
+    }
+
+    // 4. Mark code as used
+    verification.used = true;
+    verification.usedAt = new Date();
+    await verification.save();
+
+    return { message: 'Password has been reset successfully.' };
+};
+
 module.exports = {
     registerCustomer,
     loginCustomer,
-    loginGoogleCustomer
+    loginGoogleCustomer,
+    verifyEmail,
+    forgotPassword,
+    verifyResetCode,
+    resetPassword
 };

@@ -88,6 +88,10 @@ const accountSchema = new mongoose.Schema(
             default: 0
         },
 
+        isAutoPublishBlog: {
+            type: Boolean,
+            default: false
+        },
         deletedAt: {
             type: Date,
             default: null
