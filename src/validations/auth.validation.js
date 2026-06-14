@@ -135,6 +135,25 @@ const resetPasswordRules = [
         .matches(/[!@#$%^&*(),.?":{}|<>_+\-=\[\]\\';]/).withMessage('New password must contain at least one special character')
 ];
 
+/**
+ * Validation rules for customer login
+ */
+const loginRules = [
+    body('identifier')
+        .trim()
+        .notEmpty().withMessage('Email or username is required')
+        .custom((value) => {
+            const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+            const isUsername = /^[a-zA-Z0-9_]{3,50}$/.test(value);
+            if (!isEmail && !isUsername) {
+                throw new Error('Identifier must be a valid email or username');
+            }
+            return true;
+        }),
+    body('password')
+        .notEmpty().withMessage('Password is required')
+];
+
 // Helper to run validations and return response
 const runValidation = async (req, res, next, rules) => {
     for (const rule of rules) {
@@ -159,12 +178,15 @@ const validateVerifyEmail = (req, res, next) => runValidation(req, res, next, ve
 const validateForgotPassword = (req, res, next) => runValidation(req, res, next, forgotPasswordRules);
 const validateVerifyResetCode = (req, res, next) => runValidation(req, res, next, verifyResetCodeRules);
 const validateResetPassword = (req, res, next) => runValidation(req, res, next, resetPasswordRules);
+const validateLogin = (req, res, next) => runValidation(req, res, next, loginRules);
 
 module.exports = {
     validateRegister,
     validateVerifyEmail,
     validateForgotPassword,
     validateVerifyResetCode,
-    validateResetPassword
+    validateResetPassword,
+    validateLogin
 };
+
 

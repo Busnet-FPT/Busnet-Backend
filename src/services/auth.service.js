@@ -122,13 +122,13 @@ const registerCustomer = async (data) => {
 
 const loginCustomer = async ({ identifier, password }) => {
     if (!identifier || !password) {
-        throw new AppError('Please enter email/phone number and password', 400);
+        throw new AppError('Please enter email/username and password', 400);
     }
 
     const account = await Account.findOne({
         $or: [
             { email: identifier.toLowerCase() },
-            { phone: identifier }
+            { username: identifier }
         ],
         role: 'CUSTOMER'
     }).select('+passwordHash');
