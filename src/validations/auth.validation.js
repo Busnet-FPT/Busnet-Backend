@@ -136,6 +136,20 @@ const resetPasswordRules = [
 ];
 
 /**
+ * Validation rules for changing password
+ */
+const changePasswordRules = [
+    body('currentPassword')
+        .notEmpty().withMessage('Current password is required'),
+    body('newPassword')
+        .notEmpty().withMessage('New password is required')
+        .isLength({ min: 7, max: 50 }).withMessage('New password must be over 6 characters')
+        .matches(/^[A-Z]/).withMessage('First letter of new password must be capitalized')
+        .matches(/\d/).withMessage('New password must contain at least one number')
+        .matches(/[!@#$%^&*(),.?":{}|<>_+\-=\[\]\\';]/).withMessage('New password must contain at least one special character')
+];
+
+/**
  * Validation rules for customer login
  */
 const loginRules = [
@@ -178,6 +192,7 @@ const validateVerifyEmail = (req, res, next) => runValidation(req, res, next, ve
 const validateForgotPassword = (req, res, next) => runValidation(req, res, next, forgotPasswordRules);
 const validateVerifyResetCode = (req, res, next) => runValidation(req, res, next, verifyResetCodeRules);
 const validateResetPassword = (req, res, next) => runValidation(req, res, next, resetPasswordRules);
+const validateChangePassword = (req, res, next) => runValidation(req, res, next, changePasswordRules);
 const validateLogin = (req, res, next) => runValidation(req, res, next, loginRules);
 
 module.exports = {
@@ -186,6 +201,7 @@ module.exports = {
     validateForgotPassword,
     validateVerifyResetCode,
     validateResetPassword,
+    validateChangePassword,
     validateLogin
 };
 
